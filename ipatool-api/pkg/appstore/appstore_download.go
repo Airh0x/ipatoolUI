@@ -168,8 +168,6 @@ func (t *appstore) downloadFile(src, dst string, progress *progressbar.ProgressB
 }
 
 func (*appstore) downloadRequest(acc Account, app App, guid string, externalVersionID string) http.Request {
-	host := fmt.Sprintf("%s-%s", PrivateAppStoreAPIDomainPrefixWithoutAuthCode, PrivateAppStoreAPIDomain)
-
 	payload := map[string]interface{}{
 		"creditDisplay": "",
 		"guid":          guid,
@@ -180,8 +178,13 @@ func (*appstore) downloadRequest(acc Account, app App, guid string, externalVers
 		payload["externalVersionId"] = externalVersionID
 	}
 
+	podPrefix := ""
+	if acc.Pod != "" {
+		podPrefix = "p" + acc.Pod + "-"
+	}
+
 	return http.Request{
-		URL:            fmt.Sprintf("https://%s%s?guid=%s", host, PrivateAppStoreAPIPathDownload, guid),
+		URL:            fmt.Sprintf("https://%s%s%s?guid=%s", podPrefix, PrivateAppStoreAPIDomain, PrivateAppStoreAPIPathDownload, guid),
 		Method:         http.MethodPOST,
 		ResponseFormat: http.ResponseFormatXML,
 		Headers: map[string]string{
@@ -268,24 +271,6 @@ func (t *appstore) applyPatches(item downloadItemResult, acc Account, src, dst s
 	err = t.replicateZip(srcZip, dstZip)
 	if err != nil {
 		return fmt.Errorf("failed to replicate zip: %w", err)
-	}
-
-	// Replicate SINF so the device can run the app (FairPlay DRM)
-	if len(item.Sinfs) > 0 {
-		bundleName, err := t.readBundleName(srcZip)
-		if err != nil {
-			return fmt.Errorf("failed to read bundle name for SINF: %w", err)
-		}
-		manifest, _ := t.readManifestPlist(srcZip)
-		info, _ := t.readInfoPlist(srcZip)
-		if manifest != nil {
-			err = t.replicateSinfFromManifest(*manifest, dstZip, item.Sinfs, bundleName)
-		} else if info != nil {
-			err = t.replicateSinfFromInfo(*info, dstZip, item.Sinfs, bundleName)
-		}
-		if err != nil {
-			return fmt.Errorf("failed to replicate sinf: %w", err)
-		}
 	}
 
 	err = t.writeMetadata(item.Metadata, acc, dstZip)

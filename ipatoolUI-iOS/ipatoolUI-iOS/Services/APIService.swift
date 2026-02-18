@@ -199,65 +199,96 @@ final class APIService {
         request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
         request.cachePolicy = .reloadIgnoringLocalCacheData
         
-        let (asyncBytes, response) = try await session.bytes(for: request)
+        let (stream, session) = makeDownloadStream(request: request)
+        defer { session.finishTasksAndInvalidate() }
         
-        guard let httpResponse = response as? HTTPURLResponse else {
+        var httpResponse: HTTPURLResponse?
+        var contentLength: Int64?
+        var filename: String = "app.ipa"
+        var errorData = Data()
+        let fileManagerService = FileManagerService.shared
+        var tempFileURL: URL?
+        var fileHandle: FileHandle?
+        var downloadedBytes: Int64 = 0
+        let progressInterval: Int64 = 1024 * 1024 // report every 1MB
+        var lastReportedProgress: Int64 = 0
+        
+        for await event in stream {
+            switch event {
+            case .response(let response):
+                httpResponse = response
+                guard (200...299).contains(response.statusCode) else {
+                    contentLength = nil
+                    break
+                }
+                contentLength = response.value(forHTTPHeaderField: "Content-Length").flatMap { Int64($0) }
+                let contentDisposition = response.value(forHTTPHeaderField: "Content-Disposition")
+                filename = extractFilename(from: contentDisposition) ?? "app.ipa"
+                tempFileURL = try fileManagerService.createTempFile(extension: "ipa")
+                fileHandle = try FileHandle(forWritingTo: tempFileURL!)
+                
+            case .data(let data):
+                if let fh = fileHandle {
+                    try fh.write(contentsOf: data)
+                    downloadedBytes += Int64(data.count)
+                    if downloadedBytes - lastReportedProgress >= progressInterval {
+                        lastReportedProgress = downloadedBytes
+                        progressHandler(downloadedBytes, contentLength)
+                    }
+                } else {
+                    errorData.append(data)
+                }
+                
+            case .complete(let error):
+                if let fh = fileHandle {
+                    try? fh.synchronize()
+                    try? fh.close()
+                    fileHandle = nil
+                }
+                if let e = error {
+                    throw APIError.networkError(e)
+                }
+                progressHandler(downloadedBytes, contentLength)
+            }
+        }
+        
+        guard let response = httpResponse else {
             throw APIError.invalidResponse
         }
         
-        guard (200...299).contains(httpResponse.statusCode) else {
-            var errorData = Data()
-            for try await byte in asyncBytes {
-                errorData.append(byte)
-            }
+        guard (200...299).contains(response.statusCode) else {
             if let errorResponse = try? JSONDecoder().decode(ErrorResponse.self, from: errorData) {
-                throw APIError.serverError(httpResponse.statusCode, errorResponse.message ?? errorResponse.error)
+                throw APIError.serverError(response.statusCode, errorResponse.message ?? errorResponse.error)
             }
-            throw APIError.httpError(httpResponse.statusCode)
+            throw APIError.httpError(response.statusCode)
         }
         
-        let contentLength = httpResponse.value(forHTTPHeaderField: "Content-Length")
-            .flatMap { Int64($0) }
-        
-        let contentDisposition = httpResponse.value(forHTTPHeaderField: "Content-Disposition")
-        let filename = extractFilename(from: contentDisposition) ?? "app.ipa"
-        
-        let fileManagerService = FileManagerService.shared
-        let tempFileURL = try fileManagerService.createTempFile(extension: "ipa")
-        
-        guard let fileHandle = try? FileHandle(forWritingTo: tempFileURL) else {
+        guard let fileURL = tempFileURL else {
             throw APIError.networkError(NSError(domain: "APIService", code: -2, userInfo: [NSLocalizedDescriptionKey: "Failed to create temporary file"]))
         }
-        defer { try? fileHandle.close() }
         
-        var downloadedBytes: Int64 = 0
-        var buffer = [UInt8]()
-        buffer.reserveCapacity(4 * 1024 * 1024)
-        
-        for try await byte in asyncBytes {
-            buffer.append(byte)
-            downloadedBytes += 1
-            
-            if buffer.count >= 4 * 1024 * 1024 {
-                let chunkData = Data(buffer)
-                try fileHandle.write(contentsOf: chunkData)
-                buffer.removeAll(keepingCapacity: true)
-                
-                if downloadedBytes % (2 * 1024 * 1024) == 0 {
-                    progressHandler(downloadedBytes, contentLength)
-                }
-            }
-        }
-        
-        if !buffer.isEmpty {
-            let chunkData = Data(buffer)
-            try fileHandle.write(contentsOf: chunkData)
-        }
-        
-        try fileHandle.synchronize()
-        progressHandler(downloadedBytes, contentLength)
-        
-        return (tempFileURL, filename)
+        return (fileURL, filename)
+    }
+    
+    /// Creates a chunk-based download stream and a session that must be invalidated by the caller (e.g. in `defer`).
+    private func makeDownloadStream(request: URLRequest) -> (AsyncStream<DownloadStreamEvent>, URLSession) {
+        var continuation: AsyncStream<DownloadStreamEvent>.Continuation!
+        let stream = AsyncStream<DownloadStreamEvent> { continuation = $0 }
+        let delegate = DownloadStreamDelegate(continuation: continuation!)
+        let queue = OperationQueue()
+        queue.maxConcurrentOperationCount = 1
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 120
+        config.timeoutIntervalForResource = 7200
+        config.httpMaximumConnectionsPerHost = 1
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.waitsForConnectivity = false
+        config.urlCache = nil
+        config.httpShouldSetCookies = true
+        let session = URLSession(configuration: config, delegate: delegate, delegateQueue: queue)
+        let task = session.dataTask(with: request)
+        task.resume()
+        return (stream, session)
     }
     
     // MARK: - Request Builders
@@ -375,7 +406,46 @@ final class APIService {
     }
 }
 
-// MARK: - エラー型
+// MARK: - Streaming download (chunk-based to maximize throughput)
+
+private enum DownloadStreamEvent {
+    case response(HTTPURLResponse)
+    case data(Data)
+    case complete(Error?)
+}
+
+private final class DownloadStreamDelegate: NSObject, URLSessionDataDelegate {
+    private let continuation: AsyncStream<DownloadStreamEvent>.Continuation
+    private var responseDelivered = false
+    
+    init(continuation: AsyncStream<DownloadStreamEvent>.Continuation) {
+        self.continuation = continuation
+    }
+    
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+        guard !responseDelivered else {
+            completionHandler(.cancel)
+            return
+        }
+        responseDelivered = true
+        if let http = response as? HTTPURLResponse {
+            continuation.yield(.response(http))
+        }
+        completionHandler(.allow)
+    }
+    
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        guard !data.isEmpty else { return }
+        continuation.yield(.data(data))
+    }
+    
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        continuation.yield(.complete(error))
+        continuation.finish()
+    }
+}
+
+// MARK: - Error Types
 
 enum APIError: LocalizedError {
     case invalidResponse

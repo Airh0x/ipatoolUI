@@ -21,20 +21,22 @@ final class AuthViewModel: BaseViewModel {
             activeError = .serverError(400, localizationManager.strings.emailPasswordRequired)
             return
         }
-        
-        isWorking = true
-        isLoading = true
-        clearError()
-        
-        Task { [weak self] in
-            guard let self else { return }
-            do {
+        runAsync(
+            setLoading: { [weak self] in
+                self?.isWorking = true
+                self?.isLoading = true
+            },
+            unsetLoading: { [weak self] in
+                self?.isWorking = false
+                self?.isLoading = false
+            },
+            operation: { [weak self] in
+                guard let self else { return }
                 let response = try await apiService.login(
                     email: self.email,
                     password: self.password,
                     authCode: self.authCode.isEmpty ? nil : self.authCode
                 )
-                
                 if response.success {
                     let accountEmail = response.email ?? self.email
                     self.statusMessage = "\(accountEmail) \(self.localizationManager.strings.signedInAs)"
@@ -46,13 +48,8 @@ final class AuthViewModel: BaseViewModel {
                 } else {
                     self.activeError = .serverError(401, self.localizationManager.strings.loginFailed)
                 }
-            } catch {
-                self.handleError(error)
             }
-            
-            self.isWorking = false
-            self.isLoading = false
-        }
+        )
     }
     
     func fetchInfo(showProgress: Bool = true) async {
@@ -81,26 +78,25 @@ final class AuthViewModel: BaseViewModel {
     }
     
     func revoke() {
-        isWorking = true
-        isLoading = true
-        clearError()
-        
-        Task { [weak self] in
-            guard let self else { return }
-            do {
+        runAsync(
+            setLoading: { [weak self] in
+                self?.isWorking = true
+                self?.isLoading = true
+            },
+            unsetLoading: { [weak self] in
+                self?.isWorking = false
+                self?.isLoading = false
+            },
+            operation: { [weak self] in
+                guard let self else { return }
                 try await apiService.revokeAuth()
                 self.statusMessage = self.localizationManager.strings.authDeleted
                 self.email = ""
                 self.password = ""
                 self.authCode = ""
                 self.countryCode = nil
-            } catch {
-                self.handleError(error)
             }
-            
-            self.isWorking = false
-            self.isLoading = false
-        }
+        )
     }
     
     func bootstrap() {

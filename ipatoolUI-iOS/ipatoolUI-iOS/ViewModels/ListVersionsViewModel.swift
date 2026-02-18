@@ -13,33 +13,29 @@ final class ListVersionsViewModel: BaseViewModel {
             activeError = .serverError(400, localizationManager.strings.appIDOrBundleIDRequiredError)
             return
         }
-        
-        isFetching = true
-        isLoading = true
-        clearError()
         statusMessage = nil
-        
-        Task { [weak self] in
-            guard let self else { return }
-            do {
-                let appID = Int64(self.appIDString)
+        runAsync(
+            setLoading: { [weak self] in
+                self?.isFetching = true
+                self?.isLoading = true
+            },
+            unsetLoading: { [weak self] in
+                self?.isFetching = false
+                self?.isLoading = false
+            },
+            operation: { [weak self] in
+                guard let self else { return }
                 let response = try await apiService.listVersions(
                     bundleID: self.bundleID.isEmpty ? nil : self.bundleID,
-                    appID: appID
+                    appID: ValidationHelpers.parseAppID(self.appIDString)
                 )
-                
                 if response.success {
                     self.versions = response.externalVersionIDs
                     self.statusMessage = "\(self.versions.count)\(self.localizationManager.strings.versionsFound)"
                 } else {
                     self.activeError = .serverError(500, self.localizationManager.strings.fetchVersionsFailed)
                 }
-            } catch {
-                self.handleError(error)
             }
-            
-            self.isFetching = false
-            self.isLoading = false
-        }
+        )
     }
 }

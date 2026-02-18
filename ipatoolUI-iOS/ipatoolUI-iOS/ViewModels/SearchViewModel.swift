@@ -26,17 +26,19 @@ final class SearchViewModel: BaseViewModel {
             activeError = .serverError(400, localizationManager.strings.searchTermRequired)
             return
         }
-        
-        isSearching = true
-        isLoading = true
-        clearError()
         feedback = nil
-        
-        Task { [weak self] in
-            guard let self else { return }
-            do {
+        runAsync(
+            setLoading: { [weak self] in
+                self?.isSearching = true
+                self?.isLoading = true
+            },
+            unsetLoading: { [weak self] in
+                self?.isSearching = false
+                self?.isLoading = false
+            },
+            operation: { [weak self] in
+                guard let self else { return }
                 self.lastUsedCountryCode = countryCode
-                
                 let response = try await apiService.search(
                     term: trimmed,
                     limit: Int(self.limit),
@@ -46,13 +48,8 @@ final class SearchViewModel: BaseViewModel {
                 self.feedback = "\(response.count)\(self.localizationManager.strings.appsFound)"
                 self.scheduleArtworkFetch(for: response.apps)
                 self.refreshPurchaseStatus(for: response.apps)
-            } catch {
-                self.handleError(error)
             }
-            
-            self.isSearching = false
-            self.isLoading = false
-        }
+        )
     }
     
     func purchase(bundleID: String?) {
@@ -60,25 +57,18 @@ final class SearchViewModel: BaseViewModel {
             activeError = .serverError(400, localizationManager.strings.bundleIDRequired)
             return
         }
-        
         feedback = nil
-        clearError()
-        
-        Task { [weak self] in
+        runAsync(operation: { [weak self] in
             guard let self else { return }
-            do {
-                let response = try await apiService.purchase(bundleID: bundleID)
-                if response.success {
-                    self.feedback = "\(bundleID) \(self.localizationManager.strings.purchaseSuccess)"
-                    let key = self.purchaseStatusChecker.purchaseKey(forBundle: bundleID)
-                    self.purchasedKeys.insert(key)
-                } else {
-                    self.feedback = self.localizationManager.strings.purchaseCompletedNoFlag
-                }
-            } catch {
-                self.handleError(error)
+            let response = try await apiService.purchase(bundleID: bundleID)
+            if response.success {
+                self.feedback = "\(bundleID) \(self.localizationManager.strings.purchaseSuccess)"
+                let key = self.purchaseStatusChecker.purchaseKey(forBundle: bundleID)
+                self.purchasedKeys.insert(key)
+            } else {
+                self.feedback = self.localizationManager.strings.purchaseCompletedNoFlag
             }
-        }
+        })
     }
     
     func artworkURL(for app: AppInfo) -> URL? {

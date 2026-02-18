@@ -41,6 +41,7 @@ struct AppInfo: Codable, Identifiable, Hashable {
     let name: String?
     let version: String?
     let price: Double?
+    /// Server may omit artwork (upstream change). Use AppLookupService etc. when empty.
     let artworkURL: String?
     
     var id: String {

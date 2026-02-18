@@ -6,16 +6,14 @@ import (
 	gohttp "net/http"
 	"net/url"
 	"strconv"
-	"strings"
 
 	"github.com/majd/ipatool/v2/pkg/http"
 )
 
 type SearchInput struct {
-	Account     Account
-	Term        string
-	Limit       int64
-	CountryCode string // Optional: if specified, use this country code instead of account's storefront
+	Account Account
+	Term    string
+	Limit   int64
 }
 
 type SearchOutput struct {
@@ -24,21 +22,9 @@ type SearchOutput struct {
 }
 
 func (t *appstore) Search(input SearchInput) (SearchOutput, error) {
-	var countryCode string
-	var err error
-
-	// Use specified country code if provided, otherwise use account's storefront
-	if input.CountryCode != "" {
-		// Validate country code exists in storeFronts
-		if _, exists := storeFronts[strings.ToUpper(input.CountryCode)]; !exists {
-			return SearchOutput{}, fmt.Errorf("invalid country code: %s", input.CountryCode)
-		}
-		countryCode = strings.ToUpper(input.CountryCode)
-	} else {
-		countryCode, err = countryCodeFromStoreFront(input.Account.StoreFront)
-		if err != nil {
-			return SearchOutput{}, fmt.Errorf("country code is invalid: %w", err)
-		}
+	countryCode, err := countryCodeFromStoreFront(input.Account.StoreFront)
+	if err != nil {
+		return SearchOutput{}, fmt.Errorf("country code is invalid: %w", err)
 	}
 
 	request := t.searchRequest(input.Term, countryCode, input.Limit)

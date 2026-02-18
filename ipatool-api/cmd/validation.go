@@ -140,7 +140,7 @@ func validateVersionID(versionID string) error {
 func validateAppIDOrBundleID(appIDStr string, bundleID string) error {
 	if appIDStr != "" {
 		if _, err := strconv.ParseInt(appIDStr, 10, 64); err != nil {
-			return fmt.Errorf("Invalid app_id")
+			return fmt.Errorf("invalid app_id")
 		}
 		return nil
 	}

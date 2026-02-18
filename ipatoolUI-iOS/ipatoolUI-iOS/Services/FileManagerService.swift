@@ -1,6 +1,6 @@
 import Foundation
 
-/// ファイル管理の共通ロジックを提供するサービス
+/// Service providing shared file-management logic.
 @MainActor
 final class FileManagerService {
     static let shared = FileManagerService()
@@ -9,17 +9,17 @@ final class FileManagerService {
     
     private init() {}
     
-    /// Documentsディレクトリのパスを取得
+    /// Returns the app Documents directory URL.
     var documentsDirectory: URL {
         fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
     }
     
-    /// 一時ディレクトリのパスを取得
+    /// Returns the system temporary directory URL.
     var temporaryDirectory: URL {
         fileManager.temporaryDirectory
     }
     
-    /// 一時ファイルを作成
+    /// Creates a new temporary file and returns its URL.
     func createTempFile(extension ext: String = "ipa") throws -> URL {
         let tempDir = temporaryDirectory
         let tempFileURL = tempDir.appendingPathComponent(UUID().uuidString).appendingPathExtension(ext)
@@ -31,7 +31,7 @@ final class FileManagerService {
         return tempFileURL
     }
     
-    /// ファイルをDocumentsディレクトリに移動
+    /// Moves a file from the given URL into the Documents directory with the specified filename.
     func moveToDocuments(from sourceURL: URL, filename: String) throws -> URL {
         var destinationURL = documentsDirectory.appendingPathComponent(filename)
         
@@ -48,17 +48,17 @@ final class FileManagerService {
         return destinationURL
     }
     
-    /// ファイルを削除
+    /// Deletes the file at the given URL.
     func deleteFile(at url: URL) throws {
         try fileManager.removeItem(at: url)
     }
     
-    /// ファイルが存在するか確認
+    /// Returns whether a file exists at the given URL.
     func fileExists(at url: URL) -> Bool {
         fileManager.fileExists(atPath: url.path)
     }
     
-    /// Documents内の .ipa ファイル一覧を取得（更新日時降順）
+    /// Returns .ipa file URLs in Documents, sorted by modification date (newest first).
     func listIPAFiles() -> [URL] {
         guard let contents = try? fileManager.contentsOfDirectory(
             at: documentsDirectory,
@@ -75,7 +75,7 @@ final class FileManagerService {
             }
     }
     
-    /// Documents内の全 .ipa を削除
+    /// Deletes all .ipa files in the Documents directory.
     func deleteAllIPAFiles() throws {
         let urls = listIPAFiles()
         for url in urls {

@@ -164,7 +164,7 @@ ipatoolUI-iOS/
 │   │   ├── CurrencyFormatter.swift # Price formatting
 │   │   └── Localization.swift     # NSLocalizedString keys (ja/en/zh-Hans)
 │   ├── ViewModels/
-│   │   ├── BaseViewModel.swift
+│   │   ├── BaseViewModel.swift   # runAsync, handleError, clearError; shared by all
 │   │   ├── AuthViewModel.swift
 │   │   ├── SearchViewModel.swift
 │   │   ├── PurchaseViewModel.swift
@@ -188,7 +188,7 @@ ipatoolUI-iOS/
 │       ├── AsyncSemaphore.swift
 │       ├── DateFormatterHelper.swift
 │       ├── FilenameHelper.swift
-│       └── ValidationHelpers.swift
+│       └── ValidationHelpers.swift  # Input validation + parseAppID for API calls
 ├── Info.plist                     # ATS, local network, Bonjour, CFBundleLocalizations
 └── README.md                      # This file
 ```
@@ -200,6 +200,9 @@ ipatoolUI-iOS/
 - **MVVM**: Views, ViewModels, shared Models and Services.
 - **Combine** and **async/await** for state and network.
 - **MainActor** for UI updates.
+- **BaseViewModel.runAsync**: Shared pattern for async operations (loading state, clearError, handleError, optional custom setLoading/unsetLoading). All ViewModels use it for API calls.
+- **ValidationHelpers**: Centralized input validation and `parseAppID(_:)` for converting app ID strings to `Int64?` for API requests. Search, download, install, versions, and metadata flows use it.
+- **API responses**: `AppInfo.artworkURL` may be empty (server does not return artwork); the app uses `AppLookupService` for icons when needed.
 
 ### Download Behaviour
 

@@ -1,8 +1,8 @@
 import Foundation
 
-/// 日付フォーマットのヘルパー
+/// Helpers for formatting dates.
 enum DateFormatterHelper {
-    /// ISO8601日付文字列をローカライズされた日付文字列に変換
+    /// Converts an ISO8601 date string to a localized date string.
     static func formatDate(_ dateString: String, locale: Locale) -> String {
         let formatter = ISO8601DateFormatter()
         guard let date = formatter.date(from: dateString) else {

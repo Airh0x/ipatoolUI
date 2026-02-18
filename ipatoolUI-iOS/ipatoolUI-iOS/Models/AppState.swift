@@ -99,13 +99,13 @@ final class AppState: ObservableObject {
         accountCountryCode = systemCountryCode
         updateEffectiveCountryCode()
         
-        // API設定を更新
+        // Update API configuration
         apiService.updateConfiguration(
             baseURL: preferences.apiBaseURL,
             apiKey: preferences.apiKey.isEmpty ? nil : preferences.apiKey
         )
         
-        // アカウントの国コードを監視
+        // Observe account country code
         authViewModel.$countryCode
             .compactMap { $0 }
             .assign(to: &$accountCountryCode)
@@ -131,7 +131,7 @@ final class AppState: ObservableObject {
             }
             .store(in: &cancellables)
         
-        // 設定変更を監視
+        // Observe preference changes
         $preferences
             .sink { [weak self] newPreferences in
                 self?.apiService.updateConfiguration(

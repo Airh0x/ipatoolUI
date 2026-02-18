@@ -1,6 +1,6 @@
 import Foundation
 
-/// iTunes APIを使用したアプリ情報の検索サービス
+/// Service for looking up app info via the iTunes API.
 @MainActor
 final class AppLookupService {
     static let shared = AppLookupService()
@@ -12,12 +12,12 @@ final class AppLookupService {
         let trackName: String?
     }
     
-    /// バンドルIDでアプリ情報を検索
+    /// Looks up app info by bundle ID.
     func lookup(bundleID: String) async -> LookupItem? {
         await lookup(parameters: ["bundleId": bundleID])
     }
     
-    /// アプリIDでアプリ情報を検索
+    /// Looks up app info by app ID.
     func lookup(appID: Int64) async -> LookupItem? {
         await lookup(parameters: ["id": String(appID)])
     }
@@ -39,7 +39,7 @@ final class AppLookupService {
         }
     }
     
-    /// 複数のトラックIDでアートワークURLを一括取得
+    /// Fetches artwork URLs for multiple track IDs in batch.
     func lookupArtwork(trackIDs: [Int64]) async throws -> [Int64: URL] {
         let batchSize = 50
         var map: [Int64: URL] = [:]

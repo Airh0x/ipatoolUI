@@ -73,6 +73,10 @@ func mapAppStoreErrorToHTTPStatus(err error) (int, string) {
 	if strings.Contains(errMsg, "password token is expired") || strings.Contains(errMsg, "authentication") {
 		return http.StatusUnauthorized, "Authentication required. Please login first."
 	}
+	// Apple returns "Sign In to the iTunes Store" (FailureType 2042) when session/cookie is invalid or expired
+	if strings.Contains(errMsg, "Sign In to the iTunes Store") || (strings.Contains(strings.ToLower(errMsg), "sign in") && strings.Contains(strings.ToLower(errMsg), "itunes store")) {
+		return http.StatusUnauthorized, "Session may have expired. Please sign in again."
+	}
 	if strings.Contains(errMsg, "license is required") || strings.Contains(errMsg, "License is required") {
 		return http.StatusForbidden, "License is required for this app."
 	}
@@ -84,6 +88,26 @@ func mapAppStoreErrorToHTTPStatus(err error) (int, string) {
 	}
 	if strings.Contains(errMsg, "not found") {
 		return http.StatusNotFound, "Resource not found."
+	}
+	if strings.Contains(errMsg, "invalid response") || strings.Contains(errMsg, "failed to get version identifiers") || strings.Contains(errMsg, "failed to get latest version") {
+		return http.StatusNotFound, "No version history found for this app (or app not available in this region)."
+	}
+	if strings.Contains(errMsg, "failed to resolve the country code") {
+		return http.StatusBadRequest, "Account store front could not be resolved. Try signing in again."
+	}
+	// Keychain/get account (auth info): not signed in or keychain error
+	if strings.Contains(errMsg, "failed to get account") {
+		if strings.Contains(errMsg, "not found") || strings.Contains(errMsg, "could not find") || strings.Contains(errMsg, "could not be found") || strings.Contains(errMsg, "no such") {
+			return http.StatusNotFound, "Not signed in."
+		}
+		return http.StatusInternalServerError, "Failed to get account. Check keychain access or try again."
+	}
+	// Keychain/revoke: no credentials or keychain access failure
+	if strings.Contains(errMsg, "failed to remove account from keychain") || strings.Contains(errMsg, "failed to remove item") {
+		if strings.Contains(errMsg, "not found") || strings.Contains(errMsg, "could not find") || strings.Contains(errMsg, "could not be found") || strings.Contains(errMsg, "no such") {
+			return http.StatusNotFound, "No credentials to revoke."
+		}
+		return http.StatusInternalServerError, "Failed to revoke credentials. Check keychain access or try again."
 	}
 	if strings.Contains(errMsg, "license already exists") {
 		return http.StatusOK, "License already exists. You can proceed with download."

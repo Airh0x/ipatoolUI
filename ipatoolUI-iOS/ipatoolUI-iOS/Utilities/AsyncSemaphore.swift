@@ -1,6 +1,6 @@
 import Foundation
 
-/// 非同期セマフォ（同時実行数を制限）
+/// Async semaphore to limit concurrent execution.
 actor AsyncSemaphore {
     private let limit: Int
     private var currentCount: Int = 0

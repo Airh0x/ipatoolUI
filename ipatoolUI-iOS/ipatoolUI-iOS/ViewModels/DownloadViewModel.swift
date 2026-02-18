@@ -25,25 +25,27 @@ final class DownloadViewModel: BaseViewModel {
             activeError = .serverError(400, localizationManager.strings.appIDOrBundleIDRequiredError)
             return
         }
-        
-        isDownloading = true
-        isLoading = true
-        clearError()
         statusMessage = nil
         downloadedBytes = 0
-        
-        Task { [weak self] in
-            guard let self else { return }
-            do {
-                let appID = Int64(self.appIDString)
-                
+        runAsync(
+            setLoading: { [weak self] in
+                self?.isDownloading = true
+                self?.isLoading = true
+            },
+            unsetLoading: { [weak self] in
+                self?.isDownloading = false
+                self?.isLoading = false
+                self?.expectedBytes = nil
+                self?.downloadedBytes = 0
+            },
+            operation: { [weak self] in
+                guard let self else { return }
                 if let expected = await self.fetchExpectedSize() {
                     self.expectedBytes = expected
                 }
-                
                 let (tempFileURL, filename) = try await apiService.downloadToFile(
                     bundleID: self.bundleIdentifier.isEmpty ? nil : self.bundleIdentifier,
-                    appID: appID,
+                    appID: ValidationHelpers.parseAppID(self.appIDString),
                     externalVersionID: self.externalVersionID.isEmpty ? nil : self.externalVersionID,
                     autoPurchase: self.shouldAutoPurchase
                 ) { downloaded, total in
@@ -52,20 +54,12 @@ final class DownloadViewModel: BaseViewModel {
                         self.expectedBytes = total
                     }
                 }
-                
                 let fileURL = try fileManagerService.moveToDocuments(from: tempFileURL, filename: filename)
                 self.lastDownloadedURL = fileURL
                 self.statusMessage = "\(filename) \(self.localizationManager.strings.fileSaved)"
                 self.refreshDownloadedFilesList()
-            } catch {
-                self.handleError(error)
             }
-            
-            self.isDownloading = false
-            self.isLoading = false
-            self.expectedBytes = nil
-            self.downloadedBytes = 0
-        }
+        )
     }
     
     private func fetchExpectedSize() async -> Int64? {
@@ -80,7 +74,7 @@ final class DownloadViewModel: BaseViewModel {
                 return parsed
             }
         }
-        if let appID = Int64(appIDString), let item = await lookupService.lookup(appID: appID) {
+        if let appID = ValidationHelpers.parseAppID(appIDString), let item = await lookupService.lookup(appID: appID) {
             await MainActor.run {
                 if let name = item.trackName?.nonEmptyOrNil {
                     cachedAppName = name

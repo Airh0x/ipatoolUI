@@ -1,8 +1,8 @@
 import Foundation
 
-/// ファイル名生成のヘルパー
+/// Helpers for generating safe filenames.
 enum FilenameHelper {
-    /// アプリ名から安全なファイル名を生成
+    /// Produces a safe filename from an app name (e.g. for .ipa).
     static func sanitize(name: String) -> String {
         let sanitized = name.replacingOccurrences(
             of: "[^A-Za-z0-9._-]",
@@ -12,16 +12,16 @@ enum FilenameHelper {
         return sanitized.isEmpty ? "ipatool-download.ipa" : "\(sanitized).ipa"
     }
     
-    /// バンドルIDからファイル名を生成
+    /// Produces a filename from a bundle ID.
     static func filename(fromBundleID bundleID: String) -> String {
         sanitize(name: bundleID)
     }
     
-    /// アプリIDからファイル名を生成
+    /// Produces a filename from an app ID.
     static func filename(fromAppID appID: String) -> String {
         "App-\(appID).ipa"
     }
     
-    /// デフォルトファイル名
+    /// Default download filename.
     static let defaultFilename = "ipatool-download.ipa"
 }

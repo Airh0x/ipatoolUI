@@ -77,7 +77,7 @@ The **iOS app** itself runs only on iPhone/iPad (or simulator on a Mac). The **s
 
 ### ipatool-api
 
-A server-only HTTP API for App Store interactions. Provides REST endpoints for authentication, search, purchase, version management, IPA download, and install to a USB-connected device. Runs on **Windows**, Linux, and macOS; Install to Device typically uses macOS/Linux (ideviceinstaller).
+A server-only HTTP API for App Store interactions. Provides REST endpoints for authentication, search, purchase, version management, IPA download, and install to a USB-connected device. Runs on **Windows**, Linux, and macOS; Install to Device typically uses macOS/Linux (ideviceinstaller). Core App Store logic (`pkg/`) is kept in sync with [majd/ipatool](https://github.com/majd/ipatool); the server adds the API layer (`cmd/`).
 
 - **Language**: Go
 - **Requirements**: Go 1.19+ (1.23 recommended), Apple ID
@@ -155,11 +155,20 @@ open ipatoolUI-iOS.xcodeproj
 ipatoolUI/
 ├── ipatool-api/          # Go HTTP API server
 │   ├── main.go           # Entry point
-│   ├── cmd/              # Server handlers & middleware
-│   ├── pkg/              # Core packages
+│   ├── cmd/              # API layer: routing, handlers, middleware, types, validation
+│   │   ├── server.go     # RunServer, routing, tryListen
+│   │   ├── handlers.go  # HTTP handlers (auth, search, purchase, versions, download)
+│   │   ├── middleware.go # CORS, rate limit, logging, session, API key
+│   │   ├── api_types.go # Request/response DTOs
+│   │   ├── install.go   # Install-to-device handler
+│   │   ├── helpers.go   # requireAccountInfo, resolveApp, doAutoPurchaseIfNeeded
+│   │   ├── response.go  # JSON response, error mapping
+│   │   ├── validation.go # Input validation
+│   │   └── security.go  # Rate limiter, getClientIP, sanitization
+│   ├── pkg/              # Core packages (synced with upstream ipatool)
 │   └── README.md         # Server documentation
 ├── ipatoolUI-iOS/        # iOS SwiftUI client
-│   ├── ipatoolUI-iOS/    # Source code
+│   ├── ipatoolUI-iOS/    # Source code (ViewModels, Views, Services, Utilities)
 │   └── README.md         # iOS documentation
 └── README.md             # This file
 ```

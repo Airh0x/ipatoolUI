@@ -93,11 +93,11 @@ struct ListVersionsView: View {
         ValidationHelpers.isValidAppIDOrBundleID(appID: viewModel.appIDString, bundleID: viewModel.bundleID)
     }
     
-    /// 選択したバージョンでダウンロードを開始
+    /// Starts download for the selected version.
     private func downloadVersion(_ version: String) {
         let downloadViewModel = appState.downloadViewModel
         
-        // 現在のアプリIDまたはバンドルIDを設定
+        // Set current app ID or bundle ID
         if let _ = Int64(viewModel.appIDString), !viewModel.appIDString.isEmpty {
             downloadViewModel.appIDString = viewModel.appIDString
             downloadViewModel.bundleIdentifier = ""
@@ -105,17 +105,17 @@ struct ListVersionsView: View {
             downloadViewModel.appIDString = ""
             downloadViewModel.bundleIdentifier = viewModel.bundleID
         } else {
-            // アプリ情報が設定されていない場合はエラー
+            // No app info set; bail
             return
         }
         
-        // 選択したバージョンを設定
+        // Set selected version
         downloadViewModel.externalVersionID = version
         
-        // ダウンロードを開始
+        // Start download
         downloadViewModel.download()
         
-        // ダウンロード画面に切り替え
+        // Switch to download screen
         appState.selectedFeature = .download
     }
 }

@@ -76,19 +76,12 @@ func (t *appstore) purchaseWithParams(acc Account, app App, guid string, pricing
 		return ErrPasswordTokenExpired
 	}
 
-	// 詳細なエラーメッセージを構築
 	if res.Data.FailureType != "" && res.Data.CustomerMessage != "" {
-		errorMsg := fmt.Sprintf("%s (FailureType: %s)", res.Data.CustomerMessage, res.Data.FailureType)
-		return NewErrorWithMetadata(errors.New(errorMsg), res)
+		return NewErrorWithMetadata(errors.New(res.Data.CustomerMessage), res)
 	}
 
 	if res.Data.FailureType != "" {
-		errorMsg := fmt.Sprintf("Purchase failed with error type: %s", res.Data.FailureType)
-		return NewErrorWithMetadata(errors.New(errorMsg), res)
-	}
-
-	if res.Data.CustomerMessage != "" {
-		return NewErrorWithMetadata(errors.New(res.Data.CustomerMessage), res)
+		return NewErrorWithMetadata(errors.New("something went wrong"), res)
 	}
 
 	if res.StatusCode == gohttp.StatusInternalServerError {
@@ -96,16 +89,20 @@ func (t *appstore) purchaseWithParams(acc Account, app App, guid string, pricing
 	}
 
 	if res.Data.JingleDocType != "purchaseSuccess" || res.Data.Status != 0 {
-		errorMsg := fmt.Sprintf("Purchase failed: JingleDocType=%s, Status=%d", res.Data.JingleDocType, res.Data.Status)
-		return NewErrorWithMetadata(errors.New(errorMsg), res)
+		return NewErrorWithMetadata(errors.New("failed to purchase app"), res)
 	}
 
 	return nil
 }
 
 func (t *appstore) purchaseRequest(acc Account, app App, storeFront, guid string, pricingParameters string) http.Request {
+	podPrefix := ""
+	if acc.Pod != "" {
+		podPrefix = "p" + acc.Pod + "-"
+	}
+
 	return http.Request{
-		URL:            fmt.Sprintf("https://%s%s", PrivateAppStoreAPIDomain, PrivateAppStoreAPIPathPurchase),
+		URL:            fmt.Sprintf("https://%s%s%s", podPrefix, PrivateAppStoreAPIDomain, PrivateAppStoreAPIPathPurchase),
 		Method:         http.MethodPOST,
 		ResponseFormat: http.ResponseFormatXML,
 		Headers: map[string]string{

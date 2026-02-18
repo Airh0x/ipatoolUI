@@ -26,4 +26,23 @@ class BaseViewModel: ObservableObject {
     func clearError() {
         activeError = nil
     }
+    
+    /// Runs an async operation with loading state and error handling. Use setLoading/unsetLoading for custom flags (e.g. isSearching).
+    func runAsync(
+        setLoading: (() -> Void)? = nil,
+        unsetLoading: (() -> Void)? = nil,
+        operation: @escaping () async throws -> Void
+    ) {
+        setLoading?() ?? { isLoading = true }()
+        clearError()
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await operation()
+            } catch {
+                self.handleError(error)
+            }
+            unsetLoading?() ?? { self.isLoading = false }()
+        }
+    }
 }

@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -61,44 +60,25 @@ func handleInstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accountInfo, ok := getAccountInfo(r)
+	accountInfo, ok := requireAccountInfo(w, r)
 	if !ok {
-		respondError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
-
-	app := buildAppFromRequest(req.AppID, req.BundleID)
-
-	if req.BundleID != "" && app.ID == 0 {
-		lookupResult, err := dependencies.AppStore.Lookup(appstore.LookupInput{
-			Account:  accountInfo.Account,
-			BundleID: req.BundleID,
-		})
-		if err != nil {
-			dependencies.Logger.Error().Err(err).Str("bundleID", req.BundleID).Msg("Lookup failed")
-			statusCode, message := mapAppStoreErrorToHTTPStatus(err)
-			respondError(w, statusCode, message)
+	app, err := resolveApp(accountInfo, req.AppID, req.BundleID)
+	if err != nil {
+		dependencies.Logger.Error().Err(err).Str("bundleID", req.BundleID).Msg("Lookup failed")
+		if handleAppStoreError(w, err) {
 			return
 		}
-		app = lookupResult.App
 	}
-
-	if req.AutoPurchase {
-		err := dependencies.AppStore.Purchase(appstore.PurchaseInput{
-			Account: accountInfo.Account,
-			App:     app,
-		})
-		if err != nil {
-			if !errors.Is(err, appstore.ErrLicenseRequired) {
-				dependencies.Logger.Error().Err(err).Msg("AutoPurchase failed")
-				statusCode, message := mapAppStoreErrorToHTTPStatus(err)
-				respondError(w, statusCode, message)
-				return
-			}
-			dependencies.Logger.Log().Msg("AutoPurchase: License may already be purchased, continuing")
-		} else {
-			dependencies.Logger.Log().Msg("AutoPurchase: License purchased successfully")
+	if err := doAutoPurchaseIfNeeded(accountInfo, app, req.AutoPurchase); err != nil {
+		dependencies.Logger.Error().Err(err).Msg("AutoPurchase failed")
+		if handleAppStoreError(w, err) {
+			return
 		}
+	}
+	if req.AutoPurchase {
+		dependencies.Logger.Log().Msg("AutoPurchase: License purchased successfully")
 	}
 
 	tmpFile, err := os.CreateTemp("", "ipatool-install-*.ipa")

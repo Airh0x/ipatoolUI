@@ -156,11 +156,13 @@ curl "http://localhost:8080/api/v1/search?term=twitter&limit=10&country=US"
       "name": "Example App",
       "version": "1.0.0",
       "price": 0.99,
-      "artwork_url": "https://..."
+      "artwork_url": ""
     }
   ]
 }
 ```
+
+Note: `artwork_url` may be empty (the server does not return artwork URLs from the upstream App Store response). Clients can use a separate lookup (e.g. iTunes Lookup API) for icons if needed.
 
 ### License Purchase
 
@@ -433,6 +435,26 @@ sudo systemctl enable ipatool-api
 sudo systemctl start ipatool-api
 ```
 
+## Code Structure
+
+The server is organized for clear separation of concerns:
+
+| Path | Purpose |
+|------|---------|
+| `main.go` | Entry point; parses flags and calls `cmd.RunServer` |
+| `cmd/server.go` | Server bootstrap, routing, port selection (`tryListen`) |
+| `cmd/handlers.go` | HTTP handlers for auth, search, purchase, versions, metadata, download |
+| `cmd/install.go` | Install-to-device handler (download + run install command) |
+| `cmd/middleware.go` | CORS, rate limiting, body size limit, logging, session, API key |
+| `cmd/api_types.go` | API request/response types (e.g. `AuthLoginRequest`, `AppInfo`, `SearchResponse`) |
+| `cmd/helpers.go` | Shared logic: `requireAccountInfo`, `resolveApp`, `doAutoPurchaseIfNeeded`, filename/headers |
+| `cmd/response.go` | JSON response helpers and App Store error → HTTP status mapping |
+| `cmd/validation.go` | Input validation (email, bundle ID, version ID, country, etc.) |
+| `cmd/security.go` | Rate limiter config, `getClientIP`, filename sanitization, log masking |
+| `pkg/` | App Store and HTTP/keychain/log/util packages; synced with [majd/ipatool](https://github.com/majd/ipatool) |
+
+The API layer (`cmd/`) is specific to this server; `pkg/` is kept in sync with upstream ipatool so that fixes and new App Store behaviour are easy to incorporate. The server adds a small helper in `pkg/appstore/storefront.go` (`StoreFrontForCountryCode`) so that the search API can accept a `country` query parameter.
+
 ## Compiling
 
 ```bash
@@ -452,5 +474,6 @@ This API-only version:
 - **Simplified initialization**: No interactive prompts; uses environment variables for configuration.
 - **JSON logging**: Structured JSON logging.
 - **Install endpoint**: Optional install-to-device flow (server runs `ideviceinstaller` or custom command).
+- **Search country**: The search endpoint accepts a `country` query parameter (2-letter code); the server maps it to a store front via `StoreFrontForCountryCode` (API-specific helper in `pkg/appstore/storefront.go`).
 
-For the original CLI tool, see [ipatool](https://github.com/majd/ipatool).
+Core App Store logic in `pkg/` is synced with [majd/ipatool](https://github.com/majd/ipatool); only the API layer in `cmd/` and the storefront helper are specific to this server.

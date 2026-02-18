@@ -15,27 +15,27 @@ final class VersionMetadataViewModel: BaseViewModel {
             activeError = .serverError(400, localizationManager.strings.versionIDRequiredError)
             return
         }
-        
         guard ValidationHelpers.isValidAppIDOrBundleID(appID: appIDString, bundleID: bundleID) else {
             activeError = .serverError(400, localizationManager.strings.appIDOrBundleIDRequiredError)
             return
         }
-        
-        isFetching = true
-        isLoading = true
-        clearError()
         statusMessage = nil
-        
-        Task { [weak self] in
-            guard let self else { return }
-            do {
-                let appID = Int64(self.appIDString)
+        runAsync(
+            setLoading: { [weak self] in
+                self?.isFetching = true
+                self?.isLoading = true
+            },
+            unsetLoading: { [weak self] in
+                self?.isFetching = false
+                self?.isLoading = false
+            },
+            operation: { [weak self] in
+                guard let self else { return }
                 let response = try await apiService.getVersionMetadata(
                     versionID: self.versionID,
                     bundleID: self.bundleID.isEmpty ? nil : self.bundleID,
-                    appID: appID
+                    appID: ValidationHelpers.parseAppID(self.appIDString)
                 )
-                
                 if response.success {
                     self.displayVersion = response.displayVersion
                     self.releaseDate = response.releaseDate
@@ -43,12 +43,7 @@ final class VersionMetadataViewModel: BaseViewModel {
                 } else {
                     self.activeError = .serverError(500, self.localizationManager.strings.fetchMetadataFailed)
                 }
-            } catch {
-                self.handleError(error)
             }
-            
-            self.isFetching = false
-            self.isLoading = false
-        }
+        )
     }
 }

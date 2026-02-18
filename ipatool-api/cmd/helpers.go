@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -13,6 +14,50 @@ import (
 func getAccountInfo(r *http.Request) (appstore.AccountInfoOutput, bool) {
 	accountInfo, ok := r.Context().Value("accountInfo").(appstore.AccountInfoOutput)
 	return accountInfo, ok
+}
+
+// requireAccountInfo returns account info for protected handlers. If not present, responds with 401 and returns false.
+func requireAccountInfo(w http.ResponseWriter, r *http.Request) (appstore.AccountInfoOutput, bool) {
+	info, ok := getAccountInfo(r)
+	if !ok {
+		respondError(w, http.StatusUnauthorized, "Authentication required")
+		return appstore.AccountInfoOutput{}, false
+	}
+	return info, true
+}
+
+// resolveApp builds an app from appID/bundleID and performs lookup when bundleID is set and app ID is unknown.
+func resolveApp(accountInfo appstore.AccountInfoOutput, appID int64, bundleID string) (appstore.App, error) {
+	app := buildAppFromRequest(appID, bundleID)
+	if bundleID != "" && app.ID == 0 {
+		lookupResult, err := dependencies.AppStore.Lookup(appstore.LookupInput{
+			Account:  accountInfo.Account,
+			BundleID: bundleID,
+		})
+		if err != nil {
+			return appstore.App{}, err
+		}
+		app = lookupResult.App
+	}
+	return app, nil
+}
+
+// doAutoPurchaseIfNeeded purchases a license when needPurchase is true. Handles ErrLicenseRequired as non-fatal.
+func doAutoPurchaseIfNeeded(accountInfo appstore.AccountInfoOutput, app appstore.App, needPurchase bool) error {
+	if !needPurchase {
+		return nil
+	}
+	err := dependencies.AppStore.Purchase(appstore.PurchaseInput{
+		Account: accountInfo.Account,
+		App:     app,
+	})
+	if err != nil {
+		if errors.Is(err, appstore.ErrLicenseRequired) {
+			return nil // license may already exist
+		}
+		return err
+	}
+	return nil
 }
 
 func generateRequestID() string {

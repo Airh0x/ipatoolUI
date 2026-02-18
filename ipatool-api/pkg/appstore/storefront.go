@@ -17,6 +17,15 @@ func countryCodeFromStoreFront(storeFront string) (string, error) {
 	return "", fmt.Errorf("country code mapping for store front (%s) was not found", storeFront)
 }
 
+// StoreFrontForCountryCode returns the store front identifier for the given country code (e.g. "US" -> "143441").
+// Used by API clients that pass country as a query parameter.
+func StoreFrontForCountryCode(countryCode string) (string, error) {
+	if sf, ok := storeFronts[countryCode]; ok {
+		return sf, nil
+	}
+	return "", fmt.Errorf("store front for country code (%s) was not found", countryCode)
+}
+
 var storeFronts = map[string]string{
 	"AE": "143481",
 	"AG": "143540",
